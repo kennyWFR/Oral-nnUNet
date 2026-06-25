@@ -34,6 +34,6 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         path = sys.argv[1]
     else:
-        path = r"C:\Users\Junbo\PycharmProjects\nnUNet\nnUNet_raw\Dataset001_XXY\labelsTr\mask3.nii.gz"
+        path = r"/nnUNet_raw/Dataset001_XXY/labelsTr/image_3301574204.nii.gz"
 
     analyze_labels(path)

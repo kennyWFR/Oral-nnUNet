@@ -17,7 +17,7 @@ import tempfile
 import numpy as np
 import nibabel as nib
 
-DEFAULT_DATASET_DIR = r"C:\Users\Junbo\PycharmProjects\nnUNet\nnUNet_raw\Dataset001_XXY"
+DEFAULT_DATASET_DIR = r"/nnUNet_raw/Dataset001_XXY"
 NIFTI_EXTENSIONS = (".nii.gz", ".nii")
 
 
