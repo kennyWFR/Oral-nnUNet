@@ -80,12 +80,15 @@ def process_file(
     dry_run: bool,
 ) -> dict:
     img = nib.load(str(label_path))
-    data = img.get_fdata().astype(np.int16)
+    data = np.rint(img.get_fdata()).astype(np.int16)
     cleaned, stats = clean_gland_labels(data, min_voxels=min_voxels)
 
     if not dry_run:
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        nib.save(nib.Nifti1Image(cleaned, img.affine, img.header), str(output_path))
+        cleaned = cleaned.astype(np.uint8)
+        out_img = nib.Nifti1Image(cleaned, img.affine, img.header)
+        out_img.header.set_data_dtype(np.uint8)
+        nib.save(out_img, str(output_path))
 
     stats["file"] = label_path.name
     stats["output"] = str(output_path)

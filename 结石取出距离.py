@@ -79,9 +79,14 @@ def case_id_from_label_path(path: Path) -> str:
     return m.group(1)
 
 
-def load_all_landmark_ids(path: Path) -> set[str]:
+def load_landmark_order(path: Path) -> list[str]:
+    """按 asset/病历号 文件中的原始行顺序返回病历号列表。"""
     with path.open(encoding="utf-8") as f:
-        return {row["病历号"].strip() for row in csv.DictReader(f, delimiter="\t")}
+        return [
+            row["病历号"].strip()
+            for row in csv.DictReader(f, delimiter="\t")
+            if row["病历号"].strip()
+        ]
 
 
 def voxels_to_world(affine: np.ndarray, ijk: np.ndarray) -> np.ndarray:
@@ -227,16 +232,15 @@ def analyze_case(label_path: Path) -> list[dict]:
 
 
 def main() -> None:
-    landmark_ids = load_all_landmark_ids(LANDMARK_FILE)
-    label_files = sorted(LABELS_DIR.glob("image_*.nii.gz"))
+    landmark_order = load_landmark_order(LANDMARK_FILE)
 
     all_rows: list[dict] = []
-    skipped: list[str] = []
+    skipped_no_label: list[str] = []
 
-    for label_path in label_files:
-        case_id = case_id_from_label_path(label_path)
-        if case_id not in landmark_ids:
-            skipped.append(case_id)
+    for case_id in landmark_order:
+        label_path = LABELS_DIR / f"image_{case_id}.nii.gz"
+        if not label_path.exists():
+            skipped_no_label.append(case_id)
             continue
         try:
             rows = analyze_case(label_path)
@@ -253,8 +257,8 @@ def main() -> None:
 
     print(f"\nTotal stones analyzed: {len(all_rows)}")
     print(f"Saved: {OUTPUT_CSV}")
-    if skipped:
-        print(f"Skipped (no landmarks): {len(skipped)} cases")
+    if skipped_no_label:
+        print(f"Skipped (no label file): {len(skipped_no_label)} cases")
 
 
 if __name__ == "__main__":
