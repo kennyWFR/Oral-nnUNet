@@ -78,6 +78,7 @@ CSV_COLUMNS = [
 
 
 def image_id_from_path(path: Path) -> str:
+    """从标签文件路径提取病例标识（去掉 .nii.gz / .nii 扩展名）。"""
     name = path.name
     if name.endswith(".nii.gz"):
         return name[:-7]
@@ -87,6 +88,7 @@ def image_id_from_path(path: Path) -> str:
 
 
 def empty_feature_row(image_id: str) -> dict:
+    """生成无结石病例的空特征行（stone_id=0，其余字段留空）。"""
     row = {col: "" for col in CSV_COLUMNS}
     row["image_id"] = image_id
     row["stone_id"] = 0
@@ -95,6 +97,7 @@ def empty_feature_row(image_id: str) -> dict:
 
 
 def compute_stone_features(stone_mask: np.ndarray, spacing: tuple[float, float, float]) -> dict:
+    """对单颗结石的二值 mask 计算体积、表面积、形态与质心等几何特征。"""
     volume_voxels = int(stone_mask.sum())
     voxel_volume = float(np.prod(spacing))
     volume_mm3 = volume_voxels * voxel_volume
@@ -167,6 +170,7 @@ def compute_stone_features(stone_mask: np.ndarray, spacing: tuple[float, float, 
 
 
 def extract_features_from_file(label_path: Path) -> list[dict]:
+    """读取单个标签文件，提取其中所有结石连通域的特征行；无结石时返回一行空记录。"""
     image_id = image_id_from_path(label_path)
     img = nib.load(str(label_path))
     data = img.get_fdata()
@@ -194,6 +198,7 @@ def extract_features_from_file(label_path: Path) -> list[dict]:
 
 
 def process_directory(labels_dir: Path, output_csv: Path) -> None:
+    """批量处理目录下全部标签文件，汇总特征并写入 CSV。"""
     label_files = sorted(labels_dir.glob("*.nii.gz"))
     if not label_files:
         raise FileNotFoundError(f"未找到 .nii.gz 文件: {labels_dir}")
@@ -222,6 +227,7 @@ def process_directory(labels_dir: Path, output_csv: Path) -> None:
 
 
 def main():
+    """命令行入口：解析 labels 目录与输出路径，调用 process_directory。"""
     labels_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(DEFAULT_LABELS_DIR)
     output_csv = Path(sys.argv[2]) if len(sys.argv) > 2 else Path(DEFAULT_OUTPUT_CSV)
     process_directory(labels_dir, output_csv)

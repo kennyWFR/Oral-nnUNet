@@ -66,13 +66,12 @@ CSV_FIELD_DOCS: dict[str, str] = {
     "centroid_x": "结石质心 x（体素坐标，与 NIfTI 数组下标一致）",
     "centroid_y": "结石质心 y（体素坐标）",
     "centroid_z": "结石质心 z（体素坐标）",
-    "inner_gland_cc": "汇总为 inner 时，判定为 inner 的腺体连通域编号，多个用逗号分隔",
-    "per_gland_relation": "与各腺体连通域的分别关系，格式 G1:outer;G2:intersect",
 }
 CSV_FIELDNAMES: list[str] = list(CSV_FIELD_DOCS.keys())
 
 
 def case_id_from_label_path(path: Path) -> str:
+    """从 labelsTr 文件名 image_{case_id}.nii.gz 中解析病历号。"""
     m = re.match(r"image_(.+)\.nii\.gz$", path.name)
     if not m:
         raise ValueError(f"Unrecognized label filename: {path.name}")
@@ -90,12 +89,14 @@ def load_landmark_order(path: Path) -> list[str]:
 
 
 def voxels_to_world(affine: np.ndarray, ijk: np.ndarray) -> np.ndarray:
+    """将体素坐标 (i,j,k) 批量变换为物理世界坐标 (x,y,z) mm。"""
     ijk = np.atleast_2d(ijk).astype(np.float64)
     homog = np.c_[ijk, np.ones(len(ijk))]
     return (homog @ affine.T)[:, :3]
 
 
 def min_distance_mm(centroid_ijk: np.ndarray, target_ijks: np.ndarray, affine: np.ndarray) -> float:
+    """计算质心到目标体素集合的最短欧氏距离（mm）。"""
     if len(target_ijks) == 0:
         return float("nan")
     c_world = voxels_to_world(affine, centroid_ijk.reshape(1, -1))[0]
@@ -106,7 +107,7 @@ def min_distance_mm(centroid_ijk: np.ndarray, target_ijks: np.ndarray, affine: n
 def stone_surface_distances_to_gland(
     stone_mask: np.ndarray, gland_mask: np.ndarray
 ) -> tuple[float, float]:
-    """Return (min, max) EDT from stone surface voxels to nearest gland voxel."""
+    """计算结石外表面各体素到腺体的 EDT，返回 (最小距离, 最大距离)（体素单位）。"""
     surface = extract_surface_mask(stone_mask)
     coords = np.argwhere(surface)
     if len(coords) == 0:
@@ -120,6 +121,7 @@ def stone_surface_distances_to_gland(
 
 
 def stone_gland_relation(stone_mask: np.ndarray, gland_mask: np.ndarray) -> str:
+    """根据外表面 EDT 判定单颗结石与单个腺体的关系：outer / intersect / inner。"""
     min_d, max_d = stone_surface_distances_to_gland(stone_mask, gland_mask)
 
     if min_d > ADJACENT_VOXELS:
@@ -130,6 +132,7 @@ def stone_gland_relation(stone_mask: np.ndarray, gland_mask: np.ndarray) -> str:
 
 
 def aggregate_relation(relations: list[str]) -> str:
+    """汇总多腺体关系，优先级：inner > intersect > outer。"""
     if "inner" in relations:
         return "inner"
     if "intersect" in relations:
@@ -144,6 +147,7 @@ def compute_mas_masks(
     right: np.ndarray,
     chin: np.ndarray,
 ) -> dict[int, np.ndarray]:
+    """为每个腺体连通域计算内侧+前侧+上侧（MAS）表面体素 mask，用于 inner 取出距离。"""
     mas_by_gland: dict[int, np.ndarray] = {}
     for gid in range(1, num_glands + 1):
         cc = gland_labeled == gid
@@ -156,6 +160,7 @@ def compute_mas_masks(
 
 
 def analyze_case(label_path: Path) -> list[dict]:
+    """分析单个病例：判定每颗结石与腺体的关系，并计算结石取出距离。"""
     case_id = case_id_from_label_path(label_path)
     left, right, chin = load_landmarks(LANDMARK_FILE, case_id)
 
@@ -193,10 +198,8 @@ def analyze_case(label_path: Path) -> list[dict]:
 
         if relation == "outer":
             distance = OUTER_DISTANCE
-            inner_glands = ""
         elif relation == "intersect":
             distance = 0.0
-            inner_glands = ""
         else:
             inner_ids = [gid for gid, rel in per_gland.items() if rel == "inner"]
             mas_points = []
@@ -209,7 +212,6 @@ def analyze_case(label_path: Path) -> list[dict]:
             else:
                 all_mas = np.vstack(mas_points)
                 distance = min_distance_mm(centroid, all_mas, affine)
-            inner_glands = ",".join(str(i) for i in inner_ids)
 
         rows.append(
             {
@@ -223,8 +225,6 @@ def analyze_case(label_path: Path) -> list[dict]:
                 "centroid_x": round(float(centroid[0]), 2),
                 "centroid_y": round(float(centroid[1]), 2),
                 "centroid_z": round(float(centroid[2]), 2),
-                "inner_gland_cc": inner_glands,
-                "per_gland_relation": ";".join(f"{g}:{r}" for g, r in per_gland.items()),
             }
         )
 
@@ -232,6 +232,7 @@ def analyze_case(label_path: Path) -> list[dict]:
 
 
 def main() -> None:
+    """按病历号文件顺序批量分析，结果写入 stone_extraction_distance.csv。"""
     landmark_order = load_landmark_order(LANDMARK_FILE)
 
     all_rows: list[dict] = []
